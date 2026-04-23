@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=yes"
+    />
+    <title>UFE University Portal | Student-Doctor Hub</title>
+    <!-- Google Fonts & Font Awesome -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css"
+    />
+    <link rel="stylesheet" href="../css/ufe.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script>
+      // ----------------------------- MOCK DATA & STORAGE ---------------------------------
+      const STORAGE_KEYS = {
+        STUDENTS: "ufe_students",
+        DOCTORS: "ufe_doctors",
+        REQUESTS: "ufe_requests",
+        FEEDBACKS: "ufe_feedbacks",
+        GRADES: "ufe_grades",
+      };
+
+      // initial mock data
+      function initData() {
+        if (!localStorage.getItem(STORAGE_KEYS.STUDENTS)) {
+          const students = [
+            {
+              id: "20240001",
+              name: "Ahmed Mansour",
+              email: "ahmed.mansour@ufe.edu.eg",
+              department: "Engineering",
+              major: "Computer Engineering",
+            },
+            {
+              id: "20240002",
+              name: "Laila Hamed",
+              email: "laila.hamed@ufe.edu.eg",
+              department: "Engineering",
+              major: "Mechatronics",
+            },
+          ];
+          localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
+        }
+        if (!localStorage.getItem(STORAGE_KEYS.DOCTORS)) {
+          const doctors = [
+            {
+              id: "D001",
+              name: "Dr. Sarah Hassan",
+              email: "sarah.hassan@ufe.edu.eg",
+              department: "Computer Science",
+              title: "Professor of AI",
+            },
+            {
+              id: "D002",
+              name: "Dr. Mohamed El-Sayed",
+              email: "mohamed.elsayed@ufe.edu.eg",
+              department: "Engineering",
+              title: "Associate Professor",
+            },
+          ];
+          localStorage.setItem(STORAGE_KEYS.DOCTORS, JSON.stringify(doctors));
+        }
+        if (!localStorage.getItem(STORAGE_KEYS.REQUESTS)) {
+          localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify([]));
+        }
+        if (!localStorage.getItem(STORAGE_KEYS.FEEDBACKS)) {
+          localStorage.setItem(STORAGE_KEYS.FEEDBACKS, JSON.stringify([]));
+        }
+        if (!localStorage.getItem(STORAGE_KEYS.GRADES)) {
+          const grades = {
+            20240001: [
+              {
+                course: "CS411: Machine Learning",
+                credits: 3,
+                grade: "A",
+                score: 4.0,
+                term: "Fall 2025",
+              },
+              {
+                course: "CS307: Database Systems",
+                credits: 3,
+                grade: "B+",
+                score: 3.3,
+                term: "Fall 2025",
+              },
+              {
+                course: "MATH205: Calculus III",
+                credits: 3,
+                grade: "A-",
+                score: 3.7,
+                term: "Spring 2026",
+              },
+              {
+                course: "CS450: Capstone Project",
+                credits: 4,
+                grade: "A",
+                score: 4.0,
+                term: "Spring 2026",
+              },
+            ],
+            20240002: [
+              {
+                course: "MEC201: Thermodynamics",
+                credits: 3,
+                grade: "B",
+                score: 3.0,
+                term: "Fall 2025",
+              },
+              {
+                course: "MEC210: Fluid Mechanics",
+                credits: 3,
+                grade: "B+",
+                score: 3.3,
+                term: "Fall 2025",
+              },
+              {
+                course: "MATH210: Diff Equations",
+                credits: 3,
+                grade: "A",
+                score: 4.0,
+                term: "Spring 2026",
+              },
+            ],
+          };
+          localStorage.setItem(STORAGE_KEYS.GRADES, JSON.stringify(grades));
+        }
+      }
+      initData();
+
+      // Helper functions
+      function getStudents() {
+        return JSON.parse(localStorage.getItem(STORAGE_KEYS.STUDENTS));
+      }
+      function getDoctors() {
+        return JSON.parse(localStorage.getItem(STORAGE_KEYS.DOCTORS));
+      }
+      function getRequests() {
+        return JSON.parse(localStorage.getItem(STORAGE_KEYS.REQUESTS));
+      }
+      function getFeedbacks() {
+        return JSON.parse(localStorage.getItem(STORAGE_KEYS.FEEDBACKS));
+      }
+      function getGrades() {
+        return JSON.parse(localStorage.getItem(STORAGE_KEYS.GRADES));
+      }
+      function saveRequests(requests) {
+        localStorage.setItem(STORAGE_KEYS.REQUESTS, JSON.stringify(requests));
+      }
+      function saveFeedbacks(feedbacks) {
+        localStorage.setItem(STORAGE_KEYS.FEEDBACKS, JSON.stringify(feedbacks));
+      }
+
+      // compute GPA from grade list
+      function computeGPA(gradesList) {
+        let totalPoints = 0,
+          totalCredits = 0;
+        gradesList.forEach((c) => {
+          totalPoints += c.score * c.credits;
+          totalCredits += c.credits;
+        });
+        return totalCredits ? (totalPoints / totalCredits).toFixed(2) : "0.00";
+      }
+
+      // Session management
+      let currentUser = null; // { role: 'student' or 'doctor', data: {} }
+
+      // DOM root
+      const root = document.getElementById("root");
+
+      // ---------- Chatbot Component (global floating) ----------
+      let chatVisible = false;
+      function toggleChat() {
+        chatVisible = !chatVisible;
+        renderChatWindow();
+      }
+      function renderChatWindow() {
+        let existing = document.getElementById("global-chat-window");
+        if (existing) existing.remove();
+        if (!chatVisible) return;
+        const chatDiv = document.createElement("div");
+        chatDiv.id = "global-chat-window";
+        chatDiv.className = "chat-window";
+        chatDiv.innerHTML = `
+            <div class="chat-header"><i class="fas fa-robot"></i> UFE Assistant <span style="float:right; cursor:pointer;" onclick="window.toggleChat()">✕</span></div>
+            <div class="chat-messages" id="chat-messages-area">
+                <div class="faq-message">👋 Hello! Ask me about term dates, exam schedule, or holidays.</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Type your question..." autocomplete="off">
+                <button id="chat-send" style="margin-left:8px; background:#0b2b44; color:white; border:none; border-radius:30px; padding:0 14px;">Send</button>
+            </div>
+        `;
+        document.body.appendChild(chatDiv);
+        const sendBtn = document.getElementById("chat-send");
+        const inputField = document.getElementById("chat-input");
+        function sendMessage() {
+          const q = inputField.value.trim();
+          if (!q) return;
+          const area = document.getElementById("chat-messages-area");
+          area.innerHTML += `<div><strong>You:</strong> ${escapeHtml(q)}</div>`;
+          let answer = "";
+          const lower = q.toLowerCase();
+          if (lower.includes("term end") || lower.includes("end of term"))
+            answer =
+              "📅 Spring 2026 term ends on May 20th, 2026. Fall term ends December 18th, 2026.";
+          else if (
+            lower.includes("exam schedule") ||
+            lower.includes("exams schedule")
+          )
+            answer =
+              "📝 Final exams: June 1st - June 15th, 2026 (Spring). Exact schedules on portal.";
+          else if (lower.includes("holiday") || lower.includes("break"))
+            answer =
+              "🌙 Mid-year break: Feb 1-5, 2026. Summer break starts June 20th.";
+          else if (lower.includes("registration"))
+            answer = "📚 Course registration opens July 15th for Fall 2026.";
+          else
+            answer =
+              "ℹ️ Please contact registrar@ufe.edu.eg or visit student affairs. I can help with term end & exam dates!";
+          area.innerHTML += `<div class="faq-message"><i class="fas fa-comment-dots"></i> ${answer}</div>`;
+          area.scrollTop = area.scrollHeight;
+          inputField.value = "";
+        }
+        sendBtn.onclick = sendMessage;
+        inputField.addEventListener("keypress", (e) => {
+          if (e.key === "Enter") sendMessage();
+        });
+      }
+      window.toggleChat = toggleChat;
+
+      function escapeHtml(str) {
+        return str.replace(/[&<>]/g, function (m) {
+          if (m === "&") return "&amp;";
+          if (m === "<") return "&lt;";
+          if (m === ">") return "&gt;";
+          return m;
+        });
+      }
+
+      // ---------- Render Logic ----------
+      function render() {
+        if (!currentUser) {
+          renderLogin();
+        } else {
+          if (currentUser.role === "student") renderStudentDashboard();
+          else renderDoctorDashboard();
+        }
+        // chatbot button always visible
+        let btnExists = document.getElementById("floating-chat-btn");
+        if (!btnExists) {
+          const btn = document.createElement("button");
+          btn.id = "floating-chat-btn";
+          btn.className = "chatbot-btn";
+          btn.innerHTML = '<i class="fas fa-comment"></i>';
+          btn.onclick = toggleChat;
+          document.body.appendChild(btn);
+        }
+      }
+
+      function renderLogin() {
+        root.innerHTML = `
+            <div class="app-container" >
+                <div class="card" style="margin-top:2rem;">
+                    <div class="logo-area" style="justify-content:space-between; margin-bottom:1.5rem;">
+                        <img width="150px" src="../pictures/ufe.png" alt="#">
+                    </div>
+                    <h3 style="margin-bottom:1rem;">Sign in with your ID</h3>
+                    <select id="login-role" class="full-width" style="margin-bottom:1rem;">
+                        <option value="student">Student (Student ID)</option>
+                        <option value="doctor">Doctor (Doctor ID)</option>
+                    </select>
+                    <input type="text" id="login-id" placeholder="Enter ID: e.g., 20240001 or D001" autocomplete="off">
+                    <button id="login-btn" class="btn-primary" style="width:100%; margin-top:1rem;">Login →</button>
+                    <p style="margin-top:1rem; font-size:0.8rem;">Demo: Student ID: 20240001 / 20240002 | Doctor ID: D001 / D002</p>
+                </div>
+            </div>
+        `;
+        document.getElementById("login-btn").addEventListener("click", () => {
+          const role = document.getElementById("login-role").value;
+          const id = document.getElementById("login-id").value.trim();
+          if (!id) return;
+          if (role === "student") {
+            const students = getStudents();
+            const stud = students.find((s) => s.id === id);
+            if (stud) {
+              currentUser = { role: "student", data: stud };
+              render();
+            } else alert("Student ID not found");
+          } else {
+            const doctors = getDoctors();
+            const doc = doctors.find((d) => d.id === id);
+            if (doc) {
+              currentUser = { role: "doctor", data: doc };
+              render();
+            } else alert("Doctor ID not found");
+          }
+        });
+      }
+
+      // Student Dashboard
+      function renderStudentDashboard() {
+        const student = currentUser.data;
+        const allGrades = getGrades();
+        const myGrades = allGrades[student.id] || [];
+        const gpa = computeGPA(myGrades);
+        const doctorsList = getDoctors();
+        const requests = getRequests().filter(
+          (r) => r.studentId === student.id,
+        );
+        const feedbacks = getFeedbacks();
+
+        root.innerHTML = `
+            <div class="app-container">
+                <div class="top-header">
+                    <div class="logo-area">
+                         <img width="150px" src="../pictures/ufe.png" alt="#">
+                        <div class="logo-text"><p>Empower education</p></div>
+                    </div>
+                    <div class="user-greeting">
+                        <span><i class="fas fa-user-graduate"></i> ${student.name} (${student.id})</span>
+                        <button class="logout-btn" id="logoutStudentBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                    </div>
+                </div>
+                <div class="dashboard-grid">
+                    <!-- Academic progress card -->
+                    <div class="card full-width">
+                        <div class="section-title"><i class="fas fa-chart-line"></i> Academic Progress & Grades (Year 2025-2026)</div>
+                        <table>
+                            <thead><tr><th>Course</th><th>Credits</th><th>Grade</th><th>Term</th></tr></thead>
+                            <tbody>${myGrades.map((g) => `<tr><td>${g.course}</td><td>${g.credits}</td><td><span class="badge">${g.grade}</span></td><td>${g.term}</td></tr>`).join("")}</tbody>
+                        </table>
+                        <div style="margin-top:1rem; font-weight:bold;">📊 Cumulative GPA: ${gpa} / 4.0</div>
+                    </div>
+                    <!-- student profile card -->
+                    <div class="card">
+                        <div class="section-title"><i class="fas fa-id-card"></i> My Profile</div>
+                        <p><strong>Student ID:</strong> ${student.id}</p>
+                        <p><strong>Full Name:</strong> ${student.name}</p>
+                        <p><strong>Email:</strong> ${student.email}</p>
+                        <p><strong>Dept:</strong> ${student.department} | Major: ${student.major}</p>
+                    </div>
+                    <!-- Contact Doctor / Categorized Request -->
+                    <div class="card">
+                        <div class="section-title"><i class="fas fa-envelope"></i> Contact a Doctor</div>
+                        <form id="contactDoctorForm">
+                            <select id="docSelect" required>
+                                <option value="">Select Doctor</option>
+                                ${doctorsList.map((doc) => `<option value="${doc.id}">${doc.name} (${doc.department})</option>`).join("")}
+                            </select>
+                            <select id="reqCategory" required>
+                                <option value="Mark Query">📝 Mark Query</option>
+                                <option value="Assignment Clarification">📚 Assignment Clarification</option>
+                                <option value="Exam Concern">📅 Exam Concern</option>
+                                <option value="General Question">💬 General Question</option>
+                            </select>
+                            <textarea id="reqMessage" rows="2" placeholder="Write your message..."></textarea>
+                            <button type="submit" class="btn-primary">Send Request</button>
+                        </form>
+                        <hr>
+                        <div><strong>My recent requests</strong></div>
+                        <div id="studentRequestsList">${
+                          requests
+                            .slice(-3)
+                            .map(
+                              (r) =>
+                                `<div style="font-size:0.85rem; border-bottom:1px solid #eee; padding:6px 0;"><b>${r.category}</b> to Dr.${r.doctorName || r.doctorId}: ${r.message.substring(0, 60)}</div>`,
+                            )
+                            .join("") || "<i>No requests yet</i>"
+                        }</div>
+                    </div>
+                    <!-- Anonymous Feedback -->
+                    <div class="card">
+                        <div class="section-title"><i class="fas fa-comment-dots"></i> Anonymous Feedback (Doctors)</div>
+                        <form id="anonFeedbackForm">
+                            <select id="feedbackDoctorId" required>
+                                <option value="">Choose doctor</option>
+                                ${doctorsList.map((d) => `<option value="${d.id}">${d.name}</option>`).join("")}
+                            </select>
+                            <select id="ratingSelect">
+                                <option value="5">⭐⭐⭐⭐⭐ Excellent</option><option value="4">⭐⭐⭐⭐ Good</option><option value="3">⭐⭐⭐ Average</option><option value="2">⭐⭐ Poor</option><option value="1">⭐ Very Poor</option>
+                            </select>
+                            <textarea id="feedbackComment" placeholder="Your feedback (anonymous)"></textarea>
+                            <button type="submit" class="btn-secondary">Submit Feedback (Anonymous)</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.getElementById("logoutStudentBtn").onclick = () => {
+          currentUser = null;
+          render();
+        };
+        // contact doctor handler
+        document
+          .getElementById("contactDoctorForm")
+          .addEventListener("submit", (e) => {
+            e.preventDefault();
+            const doctorId = document.getElementById("docSelect").value;
+            const category = document.getElementById("reqCategory").value;
+            const message = document.getElementById("reqMessage").value;
+            if (!doctorId || !message) return alert("Fill all fields");
+            const allDoctors = getDoctors();
+            const doctor = allDoctors.find((d) => d.id === doctorId);
+            const newReq = {
+              id: Date.now(),
+              studentId: student.id,
+              studentName: student.name,
+              doctorId: doctorId,
+              doctorName: doctor?.name || doctorId,
+              category,
+              message,
+              timestamp: new Date().toLocaleString(),
+              status: "Pending",
+            };
+            const requestsNow = getRequests();
+            requestsNow.push(newReq);
+            saveRequests(requestsNow);
+            alert("Request sent to doctor.");
+            renderStudentDashboard(); // refresh
+          });
+        // anonymous feedback
+        document
+          .getElementById("anonFeedbackForm")
+          .addEventListener("submit", (e) => {
+            e.preventDefault();
+            const doctorId = document.getElementById("feedbackDoctorId").value;
+            const rating = document.getElementById("ratingSelect").value;
+            const comment = document.getElementById("feedbackComment").value;
+            if (!doctorId) return alert("Select a doctor");
+            const feedbacksList = getFeedbacks();
+            feedbacksList.push({
+              id: Date.now(),
+              doctorId,
+              rating,
+              comment,
+              timestamp: new Date().toISOString(),
+            });
+            saveFeedbacks(feedbacksList);
+            alert("Thank you! Your anonymous feedback helps us improve.");
+            document.getElementById("anonFeedbackForm").reset();
+          });
+      }
+
+      // Doctor Dashboard: profile, incoming requests, anonymous feedbacks
+      function renderDoctorDashboard() {
+        const doctor = currentUser.data;
+        const allRequests = getRequests().filter(
+          (r) => r.doctorId === doctor.id,
+        );
+        const feedbacks = getFeedbacks().filter(
+          (f) => f.doctorId === doctor.id,
+        );
+        const studentsList = getStudents();
+
+        root.innerHTML = `
+            <div class="app-container">
+                <div class="top-header">
+                    <div class="logo-area">
+                        <div class="logo-icon">UFE</div>
+                        <div class="logo-text"><h1>UFE Staff Portal</h1><p>Doctor Bridge</p></div>
+                    </div>
+                    <div class="user-greeting">
+                        <span><i class="fas fa-user-md"></i> ${doctor.name} (${doctor.id})</span>
+                        <button class="logout-btn" id="logoutDoctorBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                    </div>
+                </div>
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <div class="section-title"><i class="fas fa-address-card"></i> Doctor Profile File</div>
+                        <p><strong>ID:</strong> ${doctor.id}</p>
+                        <p><strong>Name:</strong> ${doctor.name}</p>
+                        <p><strong>Email:</strong> ${doctor.email}</p>
+                        <p><strong>Department:</strong> ${doctor.department} | ${doctor.title}</p>
+                        <p><strong>Consultation hours:</strong> Mon & Wed 11:00-13:00</p>
+                    </div>
+                    <div class="card full-width">
+                        <div class="section-title"><i class="fas fa-inbox"></i> Student Requests (by category)</div>
+                        ${
+                          allRequests.length === 0
+                            ? "<p>No requests yet</p>"
+                            : `<div>${allRequests
+                                .map(
+                                  (req) => `
+                                <div style="background:#f9fafb; border-radius: 20px; padding:1rem; margin-bottom:1rem;">
+                                    <div><strong>${req.category}</strong> from ${req.studentName || req.studentId} (${req.timestamp})</div>
+                                    <p>📝 ${req.message}</p>
+                                    <div class="badge">${req.status}</div>
+                                </div>
+                            `,
+                                )
+                                .join("")}</div>`
+                        }
+                    </div>
+                    <div class="card full-width">
+                        <div class="section-title"><i class="fas fa-star-of-life"></i> Anonymous Student Feedback</div>
+                        ${
+                          feedbacks.length === 0
+                            ? "<p><i>No anonymous feedback yet</i></p>"
+                            : feedbacks
+                                .map(
+                                  (fb) => `
+                                <div class="feedback-item">
+                                    <div><i class="fas fa-star" style="color:gold;"></i> Rating: ${"⭐".repeat(parseInt(fb.rating))} (${fb.rating}/5)</div>
+                                    <div>💬 "${fb.comment}"</div>
+                                    <small>${new Date(fb.timestamp).toLocaleDateString()}</small>
+                                </div>
+                            `,
+                                )
+                                .join("")
+                        }
+                    </div>
+                </div>
+            </div>
+        `;
+        document.getElementById("logoutDoctorBtn").onclick = () => {
+          currentUser = null;
+          render();
+        };
+      }
+
+      // initial render
+      render();
+      // attach global chatbot on window load to ensure button exists
+      window.addEventListener("load", () => {
+        if (!document.getElementById("floating-chat-btn")) render();
+        else render();
+      });
+    </script>
+  </body>
+</html>
